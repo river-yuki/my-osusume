@@ -1085,14 +1085,70 @@ function parseOgpFromHtml(html, url) {
   return { name: name.trim(), description: description.trim(), image, address, category, site_name: getMeta('og:site_name') };
 }
 
+function parseGoogleMapsUrl(finalUrl) {
+  // Extract shop name from /place/SHOP_NAME/ pattern
+  const placeMatch = finalUrl.match(/\/place\/([^/@]+)/);
+  let name = '';
+  if (placeMatch) name = decodeURIComponent(placeMatch[1]).replace(/\+/g, ' ');
+  // Extract lat/lng from /@lat,lng pattern
+  let lat = null, lng = null;
+  const coordMatch = finalUrl.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if (coordMatch) { lat = parseFloat(coordMatch[1]); lng = parseFloat(coordMatch[2]); }
+  return { name, lat, lng };
+}
+
+async function resolveShortUrl(shortUrl) {
+  // Use HEAD via proxy to resolve short URL redirects
+  try {
+    const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(shortUrl)}`, { signal: AbortSignal.timeout(8000) });
+    const json = await res.json();
+    return json.status?.url || shortUrl;
+  } catch { return shortUrl; }
+}
+
 async function importFromUrl() {
-  const url = document.getElementById('import-url').value.trim();
+  let url = document.getElementById('import-url').value.trim();
   if (!url) return;
   const status = document.getElementById('import-status');
   const btn = document.getElementById('import-btn');
   btn.disabled = true;
   status.className = 'url-import-status loading';
   status.textContent = '取得中...';
+
+  // Handle Google Maps URLs specially
+  const isGmaps = url.includes('maps.app.goo.gl') || url.includes('goo.gl/maps') || url.includes('google.com/maps') || url.includes('google.co.jp/maps');
+  if (isGmaps) {
+    try {
+      // Resolve short URL to get the full URL with place name
+      let fullUrl = url;
+      if (url.includes('goo.gl')) {
+        status.textContent = 'Google Maps リンクを解析中...';
+        fullUrl = await resolveShortUrl(url);
+      }
+      const gmaps = parseGoogleMapsUrl(fullUrl);
+      if (gmaps.name) {
+        document.getElementById('shop-name').value = gmaps.name;
+        let filled = ['店名'];
+        if (gmaps.lat && gmaps.lng) filled.push('座標');
+        // Store coordinates for later use
+        if (gmaps.lat && gmaps.lng) {
+          document.getElementById('import-url').dataset.lat = gmaps.lat;
+          document.getElementById('import-url').dataset.lng = gmaps.lng;
+        }
+        status.className = 'url-import-status success';
+        status.textContent = `${filled.join('・')}を取得しました（住所は手動で入力してください）`;
+      } else {
+        status.className = 'url-import-status error';
+        status.textContent = 'Google Mapsから店名を取得できませんでした。手動で入力してください';
+      }
+    } catch {
+      status.className = 'url-import-status error';
+      status.textContent = 'Google Mapsリンクの解析に失敗しました。手動で入力してください';
+    }
+    btn.disabled = false;
+    return;
+  }
+
   try {
     let data;
     // Try local server first, then multiple CORS proxies
@@ -1131,19 +1187,23 @@ async function importFromUrl() {
       btn.disabled = false; return;
     }
     if (data.error) { status.className = 'url-import-status error'; status.textContent = `取得に失敗しました: ${data.error}`; btn.disabled = false; return; }
-    if (data.name) document.getElementById('shop-name').value = data.name;
+    // Skip generic site names
+    const skipNames = ['google maps', 'google マップ', 'retty', '食べログ'];
+    if (data.name && !skipNames.some(s => data.name.toLowerCase().includes(s))) document.getElementById('shop-name').value = data.name;
     if (data.address) document.getElementById('shop-address').value = data.address;
     if (data.description && !document.getElementById('shop-memo').value) document.getElementById('shop-memo').value = data.description.substring(0, 200);
     if (data.category) {
       const catLower = data.category.toLowerCase();
       for (const [key, val] of Object.entries(CATEGORY_MAP)) { if (catLower.includes(key.toLowerCase())) { document.getElementById('shop-category').value = val; break; } }
     }
-    if (data.image && !currentPhoto) {
+    const isMapImage = data.image && (data.image.includes('maps.googleapis.com') || data.image.includes('maps.gstatic.com') || data.image.includes('google.com/maps'));
+    if (data.image && !currentPhoto && !isMapImage) {
       currentPhoto = data.image;
       document.getElementById('photo-area').classList.add('has-photo');
       document.getElementById('photo-placeholder').innerHTML = `<img src="${data.image}" alt="photo">`;
     }
-    let filled = []; if (data.name) filled.push('店名'); if (data.address) filled.push('住所'); if (data.category) filled.push('カテゴリ'); if (data.image) filled.push('写真');
+    const validName = data.name && !skipNames.some(s => data.name.toLowerCase().includes(s));
+    let filled = []; if (validName) filled.push('店名'); if (data.address) filled.push('住所'); if (data.category) filled.push('カテゴリ'); if (data.image && !isMapImage) filled.push('写真');
     status.className = 'url-import-status success';
     status.textContent = filled.length > 0 ? `${filled.join('・')}を取得しました` : '情報を取得できませんでした。手動で入力してください';
   } catch { status.className = 'url-import-status error'; status.textContent = 'エラーが発生しました。お店の名前を手動で入力してください'; }
