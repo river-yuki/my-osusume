@@ -1452,7 +1452,7 @@ function addToMyList(id, status) {
   const newShop = {
     ...shop,
     id: Date.now(),
-    from: '',
+    from: shop.from || '',
     visits: [],
     isPublic: false,
     createdAt: new Date().toISOString(),
