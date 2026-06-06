@@ -1038,8 +1038,47 @@ function parseOgpFromHtml(html, url) {
   const description = getMeta('og:description') || getMeta('description');
   const image = getMeta('og:image');
   let address = '';
-  const addrMatch = description.match(/(東京都|北海道|(?:京都|大阪)府|.{2,3}県).{2,50}/);
-  if (addrMatch) address = addrMatch[0].split('。')[0].split('、')[0].trim();
+  const addrPat = /(東京都|北海道|(?:京都|大阪)府|.{2,3}県)[^\s<」】）)。、]{2,50}/;
+  // 1) JSON-LD structured data
+  try {
+    doc.querySelectorAll('script[type="application/ld+json"]').forEach(s => {
+      if (address) return;
+      const ld = JSON.parse(s.textContent);
+      const items = Array.isArray(ld) ? ld : [ld];
+      items.forEach(item => {
+        if (address) return;
+        const a = item.address;
+        if (typeof a === 'string') { address = a; }
+        else if (a && a.streetAddress) {
+          address = [a.addressRegion, a.addressLocality, a.streetAddress].filter(Boolean).join('');
+        }
+      });
+    });
+  } catch {}
+  // 2) Address-related elements
+  if (!address) {
+    const addrSelectors = ['.rstinfo-table__address', '.shop-info address', '[class*="address"]', '[itemprop="address"]', 'address'];
+    for (const sel of addrSelectors) {
+      const el = doc.querySelector(sel);
+      if (el) {
+        const t = el.textContent.trim().replace(/\s+/g, ' ');
+        const m = t.match(addrPat);
+        if (m) { address = m[0].trim(); break; }
+      }
+    }
+  }
+  // 3) OGP description / full text fallback
+  if (!address) {
+    const m = description.match(addrPat);
+    if (m) address = m[0].split('。')[0].split('、')[0].trim();
+  }
+  if (!address) {
+    const bodyText = doc.body ? doc.body.textContent : '';
+    const m = bodyText.match(addrPat);
+    if (m) address = m[0].split('。')[0].split('、')[0].trim();
+  }
+  // Clean address
+  address = address.replace(/[\s\n\r]+/g, '').substring(0, 80);
   let category = '';
   const cats = ['ラーメン','焼肉','寿司','イタリアン','フレンチ','中華','カフェ','居酒屋','和食','洋食','韓国料理','カレー','パン','スイーツ','バー'];
   for (const cat of cats) { if (description.includes(cat) || name.includes(cat)) { category = cat; break; } }
