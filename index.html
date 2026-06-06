@@ -1095,14 +1095,40 @@ async function importFromUrl() {
   status.textContent = '取得中...';
   try {
     let data;
-    try {
-      const res = await fetch(`/api/ogp?url=${encodeURIComponent(url)}`);
-      data = await res.json();
-    } catch {
-      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-      const res2 = await fetch(proxyUrl);
-      const html = await res2.text();
-      data = parseOgpFromHtml(html, url);
+    // Try local server first, then multiple CORS proxies
+    const proxies = [
+      (u) => `/api/ogp?url=${encodeURIComponent(u)}`,
+      (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+      (u) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
+    ];
+    let fetched = false;
+    for (let i = 0; i < proxies.length; i++) {
+      try {
+        const proxyUrl = proxies[i](url);
+        const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
+        if (!res.ok) continue;
+        if (i === 0) {
+          data = await res.json();
+        } else if (i === 2) {
+          // allorigins /get returns JSON with contents field
+          const json = await res.json();
+          data = parseOgpFromHtml(json.contents || '', url);
+        } else {
+          const html = await res.text();
+          data = parseOgpFromHtml(html, url);
+        }
+        if (data && (data.name || data.image)) { fetched = true; break; }
+      } catch { continue; }
+    }
+    if (!fetched || !data) {
+      // Try extracting shop name from URL for tabelog etc.
+      let hint = '';
+      if (url.includes('tabelog.com')) hint = '\n食べログのURLは取得制限があります。';
+      status.className = 'url-import-status error';
+      status.textContent = `このサイトからは自動取得できませんでした。${hint}お店の名前を手動で入力してください`;
+      // Still save the URL
+      document.getElementById('import-url').dataset.savedUrl = url;
+      btn.disabled = false; return;
     }
     if (data.error) { status.className = 'url-import-status error'; status.textContent = `取得に失敗しました: ${data.error}`; btn.disabled = false; return; }
     if (data.name) document.getElementById('shop-name').value = data.name;
@@ -1120,7 +1146,7 @@ async function importFromUrl() {
     let filled = []; if (data.name) filled.push('店名'); if (data.address) filled.push('住所'); if (data.category) filled.push('カテゴリ'); if (data.image) filled.push('写真');
     status.className = 'url-import-status success';
     status.textContent = filled.length > 0 ? `${filled.join('・')}を取得しました` : '情報を取得できませんでした。手動で入力してください';
-  } catch { status.className = 'url-import-status error'; status.textContent = '通信エラーが発生しました。URLを確認してください'; }
+  } catch { status.className = 'url-import-status error'; status.textContent = 'エラーが発生しました。お店の名前を手動で入力してください'; }
   btn.disabled = false;
 }
 
