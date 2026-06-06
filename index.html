@@ -1111,20 +1111,40 @@ async function importFromUrl() {
   const isGmapsShort = url.includes('maps.app.goo.gl') || url.includes('goo.gl/maps');
   const isGmapsFull = url.includes('google.com/maps') || url.includes('google.co.jp/maps');
   if (isGmapsShort || isGmapsFull) {
+    if (isGmapsShort) {
+      status.className = 'url-import-status error';
+      status.innerHTML = 'Google Mapsの短縮URLからは情報を取得できません。<br>💡 Google Mapsでお店を開き、<b>ブラウザのアドレスバー</b>からURLをコピーしてください';
+      btn.disabled = false;
+      return;
+    }
     const gmaps = parseGoogleMapsUrl(url);
+    let filled = [];
     if (gmaps.name) {
       document.getElementById('shop-name').value = gmaps.name;
-      let filled = ['店名'];
-      if (gmaps.lat && gmaps.lng) filled.push('座標');
+      filled.push('店名');
+    }
+    // Use coordinates to reverse geocode address via Nominatim
+    if (gmaps.lat && gmaps.lng) {
+      try {
+        status.textContent = '住所を取得中...';
+        const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${gmaps.lat}&lon=${gmaps.lng}&zoom=18&addressdetails=1&accept-language=ja`, { signal: AbortSignal.timeout(8000) });
+        const geo = await geoRes.json();
+        if (geo.address) {
+          const a = geo.address;
+          const addr = [a.province || a.state || '', a.city || a.town || a.village || '', a.city_district || a.suburb || '', a.quarter || a.neighbourhood || '', a.road || '', a.house_number || ''].filter(Boolean).join('');
+          if (addr) {
+            document.getElementById('shop-address').value = addr;
+            filled.push('住所');
+          }
+        }
+      } catch {}
+    }
+    if (filled.length > 0) {
       status.className = 'url-import-status success';
-      status.textContent = `${filled.join('・')}を取得しました（住所は手動で入力してください）`;
-    } else if (isGmapsShort) {
-      // Short URL doesn't contain place name - guide user
-      status.className = 'url-import-status error';
-      status.innerHTML = 'Google Mapsの短縮URLからは店名を取得できません。<br>💡 Google Mapsでお店を開き、<b>ブラウザのアドレスバー</b>からURLをコピーしてください';
+      status.textContent = `${filled.join('・')}を取得しました`;
     } else {
       status.className = 'url-import-status error';
-      status.textContent = 'Google Mapsから店名を取得できませんでした。手動で入力してください';
+      status.textContent = 'Google Mapsから情報を取得できませんでした。手動で入力してください';
     }
     btn.disabled = false;
     return;
