@@ -1,0 +1,1443 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>My Osusume - おすすめのお店</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  :root {
+    --primary: #06C755;
+    --primary-dark: #05a848;
+    --bg: #f5f5f5;
+    --card-bg: #fff;
+    --text: #333;
+    --text-light: #888;
+    --border: #e0e0e0;
+    --radius: 12px;
+    --shadow: 0 2px 8px rgba(0,0,0,0.08);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    max-width: 480px;
+    margin: 0 auto;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .header {
+    background: var(--primary);
+    color: #fff;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+  }
+  .header h1 { font-size: 18px; font-weight: 700; }
+  .header-actions { display: flex; gap: 8px; }
+  .header-btn {
+    background: rgba(255,255,255,0.2);
+    border: none;
+    color: #fff;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .header-btn:active { background: rgba(255,255,255,0.3); }
+
+  /* List Tabs */
+  .list-tabs {
+    display: flex;
+    background: var(--card-bg);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 60px;
+    z-index: 999;
+  }
+  .list-tab {
+    flex: 1;
+    padding: 10px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-light);
+    border: none;
+    background: none;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+  }
+  .list-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+  .list-tab-count {
+    display: inline-block;
+    background: var(--bg);
+    color: var(--text-light);
+    font-size: 11px;
+    padding: 1px 6px;
+    border-radius: 10px;
+    margin-left: 4px;
+  }
+  .list-tab.active .list-tab-count { background: #e8f5e9; color: var(--primary); }
+
+  /* View Tabs (リスト / マップ) */
+  .view-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 8px 16px;
+    background: var(--card-bg);
+    border-bottom: 1px solid var(--border);
+  }
+  .view-tab {
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-light);
+    border: 1px solid var(--border);
+    background: none;
+    cursor: pointer;
+    border-radius: 20px;
+    transition: all 0.2s;
+  }
+  .view-tab.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+  /* Search */
+  .search-bar {
+    padding: 8px 16px;
+    background: var(--card-bg);
+  }
+  .search-input-wrap {
+    position: relative;
+  }
+  .search-input-wrap svg {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-light);
+  }
+  .search-input {
+    width: 100%;
+    padding: 8px 10px 8px 34px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+    background: var(--bg);
+    -webkit-appearance: none;
+  }
+  .search-input:focus { outline: none; border-color: var(--primary); }
+  .search-clear {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: var(--text-light);
+    font-size: 18px;
+    cursor: pointer;
+    display: none;
+    padding: 2px;
+  }
+  .search-clear.visible { display: block; }
+
+  /* Category Filter */
+  .category-filter {
+    display: flex;
+    gap: 6px;
+    padding: 8px 16px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    background: var(--card-bg);
+    border-bottom: 1px solid var(--border);
+  }
+  .category-filter::-webkit-scrollbar { display: none; }
+  .category-chip {
+    flex-shrink: 0;
+    padding: 4px 12px;
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    background: var(--card-bg);
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+  }
+  .category-chip.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+  /* Person Filter */
+  .person-filter-wrap {
+    background: var(--card-bg);
+    border-bottom: 1px solid var(--border);
+    padding: 6px 16px;
+    display: none;
+  }
+  .person-filter-wrap.visible { display: block; }
+  .person-filter-label { font-size: 10px; color: var(--text-light); font-weight: 600; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .person-filter {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .person-filter::-webkit-scrollbar { display: none; }
+  .person-chip {
+    flex-shrink: 0;
+    padding: 4px 12px;
+    border-radius: 16px;
+    border: 1px solid #b2dfdb;
+    background: #e0f2f1;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+    color: #00695c;
+  }
+  .person-chip.active { background: #00897b; color: #fff; border-color: #00897b; }
+
+  .content { flex: 1; padding: 8px 16px 100px; }
+
+  /* Compact Shop Card */
+  .shop-item {
+    background: var(--card-bg);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    margin-bottom: 6px;
+    padding: 10px 14px;
+    cursor: pointer;
+    transition: transform 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .shop-item:active { transform: scale(0.98); }
+  .shop-item-emoji {
+    font-size: 24px;
+    width: 36px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .shop-item-info { flex: 1; min-width: 0; }
+  .shop-item-top {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 2px;
+  }
+  .shop-item-name {
+    font-size: 14px;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .shop-item-rating { color: #f5a623; font-size: 11px; flex-shrink: 0; }
+  .shop-item-sub {
+    font-size: 11px;
+    color: var(--text-light);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .shop-item-meta {
+    display: flex;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--text-light);
+    margin-top: 1px;
+  }
+  .shop-item-from {
+    font-size: 10px;
+    color: var(--primary);
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  .shop-item-chevron {
+    color: var(--border);
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+
+  /* Result count */
+  .result-count {
+    font-size: 11px;
+    color: var(--text-light);
+    padding: 4px 0 2px;
+  }
+
+  #map-container { height: calc(100dvh - 200px); display: none; }
+  #map { height: 100%; width: 100%; }
+
+  .empty-state { text-align: center; padding: 40px 20px; color: var(--text-light); }
+  .empty-state-icon { font-size: 40px; margin-bottom: 8px; }
+  .empty-state-text { font-size: 13px; line-height: 1.6; }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 2000;
+    display: none; align-items: flex-end; justify-content: center;
+  }
+  .modal-overlay.visible { display: flex; }
+  .modal {
+    background: var(--card-bg); border-radius: 20px 20px 0 0;
+    width: 100%; max-width: 480px; max-height: 90dvh;
+    overflow-y: auto; padding: 24px 20px; animation: slideUp 0.3s ease;
+  }
+  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+  .modal-title { font-size: 18px; font-weight: 700; }
+  .modal-close { background: none; border: none; font-size: 24px; color: var(--text-light); cursor: pointer; padding: 4px; }
+
+  .form-group { margin-bottom: 16px; }
+  .form-label { font-size: 13px; font-weight: 600; margin-bottom: 6px; display: block; }
+  .form-input, .form-textarea, .form-select {
+    width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 8px;
+    font-size: 15px; font-family: inherit; background: var(--bg); -webkit-appearance: none;
+  }
+  .form-input:focus, .form-textarea:focus, .form-select:focus { outline: none; border-color: var(--primary); }
+  .form-textarea { resize: vertical; min-height: 80px; }
+
+  .rating-input { display: flex; gap: 4px; }
+  .rating-star { font-size: 28px; cursor: pointer; color: #ddd; background: none; border: none; padding: 2px; }
+  .rating-star.active { color: #f5a623; }
+
+  .photo-upload-area {
+    border: 2px dashed var(--border); border-radius: 8px; padding: 20px;
+    text-align: center; cursor: pointer; color: var(--text-light); font-size: 13px;
+    position: relative; overflow: hidden;
+  }
+  .photo-upload-area.has-photo { border-style: solid; padding: 0; }
+  .photo-upload-area img { width: 100%; height: 160px; object-fit: cover; display: block; }
+  .photo-upload-area input { display: none; }
+
+  .url-import { background: #f0faf4; border: 1px solid #c8e6d0; border-radius: 8px; padding: 12px; margin-bottom: 16px; }
+  .url-import-row { display: flex; gap: 8px; }
+  .url-import input { flex: 1; padding: 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; background: #fff; font-family: inherit; }
+  .url-import input:focus { outline: none; border-color: var(--primary); }
+  .url-import button { padding: 10px 14px; background: var(--primary); color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; font-family: inherit; }
+  .url-import button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .url-import-hint { font-size: 11px; color: var(--text-light); margin-top: 6px; }
+  .url-import-status { font-size: 12px; margin-top: 8px; padding: 8px; border-radius: 6px; display: none; }
+  .url-import-status.loading { display: block; background: #fff3cd; color: #856404; }
+  .url-import-status.success { display: block; background: #d4edda; color: #155724; }
+  .url-import-status.error { display: block; background: #f8d7da; color: #721c24; }
+
+  .form-divider { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+  .btn-primary { width: 100%; padding: 14px; background: var(--primary); color: #fff; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .btn-primary:active { background: var(--primary-dark); }
+  .btn-danger { width: 100%; padding: 12px; background: none; color: #e74c3c; border: 1px solid #e74c3c; border-radius: 8px; font-size: 14px; cursor: pointer; margin-top: 8px; font-family: inherit; }
+
+  .share-section { margin-top: 20px; }
+  .share-url { display: flex; gap: 8px; align-items: center; }
+  .share-url input { flex: 1; padding: 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; background: var(--bg); }
+  .share-url button { padding: 10px 16px; background: var(--primary); color: #fff; border: none; border-radius: 8px; font-size: 13px; cursor: pointer; white-space: nowrap; }
+  .share-buttons { display: flex; gap: 8px; margin-top: 12px; }
+  .share-btn { flex: 1; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--card-bg); cursor: pointer; text-align: center; font-size: 12px; font-family: inherit; }
+  .share-btn-icon { font-size: 20px; display: block; margin-bottom: 4px; }
+
+  .detail-view { position: fixed; inset: 0; background: var(--bg); z-index: 1500; display: none; flex-direction: column; max-width: 480px; margin: 0 auto; }
+  .detail-view.visible { display: flex; }
+  .detail-header { display: flex; align-items: center; padding: 12px 16px; background: var(--card-bg); border-bottom: 1px solid var(--border); }
+  .detail-back { background: none; border: none; font-size: 24px; cursor: pointer; padding: 4px 8px 4px 0; color: var(--primary); }
+  .detail-title { font-size: 16px; font-weight: 700; flex: 1; }
+  .detail-edit { background: none; border: none; color: var(--primary); font-size: 14px; font-weight: 600; cursor: pointer; }
+  .detail-content { flex: 1; overflow-y: auto; }
+  .detail-image { width: 100%; height: 220px; object-fit: cover; background: #eee; display: flex; align-items: center; justify-content: center; font-size: 60px; color: var(--text-light); }
+  .detail-body { padding: 20px 16px; }
+  .detail-category { font-size: 12px; color: var(--primary); font-weight: 600; margin-bottom: 4px; }
+  .detail-name { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
+  .detail-rating { color: #f5a623; font-size: 18px; margin-bottom: 12px; }
+  .detail-address { font-size: 14px; color: var(--text-light); margin-bottom: 16px; }
+  .detail-from { font-size: 12px; color: var(--primary); font-weight: 600; margin-bottom: 12px; padding: 6px 10px; background: #e8f5e9; border-radius: 6px; display: inline-block; }
+  .detail-memo { font-size: 15px; line-height: 1.7; margin-bottom: 20px; }
+  .detail-map { height: 200px; border-radius: var(--radius); overflow: hidden; margin-bottom: 16px; }
+  .detail-actions { display: flex; gap: 8px; margin-bottom: 24px; }
+  .detail-action-btn { flex: 1; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--card-bg); cursor: pointer; text-align: center; font-size: 13px; font-family: inherit; }
+  .detail-action-icon { font-size: 18px; display: block; margin-bottom: 4px; }
+
+  .visits-section { margin-top: 8px; }
+  .visits-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .visits-title { font-size: 16px; font-weight: 700; }
+  .visits-add-btn { background: var(--primary); color: #fff; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .visit-card { background: var(--card-bg); border-radius: 10px; box-shadow: var(--shadow); padding: 12px; margin-bottom: 10px; position: relative; }
+  .visit-date { font-size: 13px; font-weight: 600; color: var(--primary); margin-bottom: 6px; }
+  .visit-memo { font-size: 13px; color: #555; line-height: 1.5; margin-bottom: 8px; }
+  .visit-photos { display: flex; gap: 6px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .visit-photos::-webkit-scrollbar { display: none; }
+  .visit-photo { width: 100px; height: 100px; border-radius: 8px; object-fit: cover; flex-shrink: 0; }
+  .visit-delete { position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,0.1); border: none; border-radius: 50%; width: 24px; height: 24px; font-size: 14px; cursor: pointer; color: var(--text-light); display: flex; align-items: center; justify-content: center; }
+  .visit-empty { text-align: center; padding: 20px; color: var(--text-light); font-size: 13px; }
+
+  .visit-photos-preview { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .visit-photos-preview img { width: 70px; height: 70px; border-radius: 6px; object-fit: cover; }
+  .visit-photo-add-btn { width: 70px; height: 70px; border: 2px dashed var(--border); border-radius: 6px; background: none; cursor: pointer; font-size: 24px; color: var(--text-light); display: flex; align-items: center; justify-content: center; }
+  .visit-form-actions { display: flex; gap: 8px; margin-top: 12px; }
+  .visit-form-actions button { flex: 1; padding: 10px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .visit-save-btn { background: var(--primary); color: #fff; border: none; }
+  .visit-cancel-btn { background: none; color: var(--text-light); border: 1px solid var(--border); }
+
+  .toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 10px 20px; border-radius: 20px; font-size: 13px; z-index: 3000; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+  .toast.visible { opacity: 1; }
+
+  .shared-banner { background: #fff3cd; padding: 12px 16px; font-size: 13px; text-align: center; border-bottom: 1px solid #ffc107; }
+  .shared-banner button { background: var(--primary); color: #fff; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; margin-left: 8px; cursor: pointer; }
+
+  .friends-btn { background: none; border: none; cursor: pointer; color: #fff; padding: 4px; }
+  .friends-modal-list { max-height: 300px; overflow-y: auto; }
+  .friend-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  .friend-item:last-child { border-bottom: none; }
+  .friend-name { font-size: 15px; font-weight: 500; }
+  .friend-delete { background: none; border: none; color: #e53935; font-size: 18px; cursor: pointer; padding: 4px 8px; }
+  .friend-add-row { display: flex; gap: 8px; margin-top: 12px; }
+  .friend-add-row input { flex: 1; }
+  .friend-add-row button { background: var(--primary); color: #fff; border: none; padding: 8px 16px; border-radius: 8px; font-size: 14px; cursor: pointer; white-space: nowrap; }
+  .friend-empty { text-align: center; padding: 24px 16px; color: var(--text-light); font-size: 14px; }
+
+  .send-friend-list { max-height: 300px; overflow-y: auto; }
+  .send-friend-item { display: flex; align-items: center; gap: 12px; padding: 12px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.15s; }
+  .send-friend-item:hover { background: #f0f0f0; }
+  .send-friend-item:last-child { border-bottom: none; }
+  .send-friend-avatar { width: 36px; height: 36px; border-radius: 50%; background: #e0f2f1; color: #00897b; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; flex-shrink: 0; }
+  .send-friend-name { font-size: 15px; font-weight: 500; }
+  .send-method-btns { display: flex; gap: 8px; margin-top: 16px; }
+  .send-method-btns button { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--border); background: #fff; cursor: pointer; font-size: 13px; }
+  .send-method-btns button.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .send-selected { padding: 12px; background: #e8f5e9; border-radius: 8px; margin-bottom: 12px; font-size: 14px; text-align: center; }
+
+  .status-filter { display: flex; gap: 6px; padding: 6px 16px; background: var(--card-bg); border-bottom: 1px solid var(--border); align-items: center; overflow-x: auto; }
+  .status-chip { padding: 4px 10px; border-radius: 16px; border: 1px solid var(--border); background: #fff; color: var(--text); font-size: 11px; cursor: pointer; white-space: nowrap; }
+  .status-chip.active { background: #1a237e; color: #fff; border-color: #1a237e; }
+  .status-chip.pub-chip.active { background: #00897b; color: #fff; border-color: #00897b; }
+  .status-divider { width: 1px; height: 20px; background: var(--border); flex-shrink: 0; }
+  .shop-item-badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600; flex-shrink: 0; }
+  .shop-item-badge.visited { background: #e3f2fd; color: #1565c0; }
+  .shop-item-badge.want { background: #fff3e0; color: #e65100; }
+
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; }
+  .toggle-label { font-size: 14px; color: var(--text); }
+  .toggle-hint { font-size: 11px; color: var(--text-light); margin-top: 2px; }
+  .toggle-switch { position: relative; width: 44px; height: 24px; flex-shrink: 0; }
+  .toggle-switch input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider { position: absolute; inset: 0; background: #ccc; border-radius: 12px; cursor: pointer; transition: 0.2s; }
+  .toggle-slider::before { content: ''; position: absolute; width: 18px; height: 18px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: 0.2s; }
+  .toggle-switch input:checked + .toggle-slider { background: var(--primary); }
+  .toggle-switch input:checked + .toggle-slider::before { transform: translateX(20px); }
+  .shop-item-public { font-size: 10px; color: var(--primary); font-weight: 600; }
+
+  .sort-btn { background: none; border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px; font-size: 11px; color: var(--text); cursor: pointer; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+  .sort-btn.active { border-color: var(--primary); color: var(--primary); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>My Osusume</h1>
+  <div class="header-actions">
+    <button class="header-btn" onclick="openFriendsModal()" title="友達">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+    </button>
+    <button class="header-btn" onclick="openShareModal()" title="共有">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+    </button>
+    <button class="header-btn" onclick="openAddModal()" title="追加">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
+  </div>
+</div>
+
+<div id="shared-banner" class="shared-banner" style="display:none;">
+  <span id="shared-owner"></span>さんのおすすめリスト
+  <button onclick="importSharedShops()">自分のリストに追加</button>
+</div>
+
+<!-- List Tabs -->
+<div class="list-tabs">
+  <button class="list-tab" data-list="all" onclick="switchListTab('all')">
+    全部 <span class="list-tab-count" id="count-all">0</span>
+  </button>
+  <button class="list-tab active" data-list="mine" onclick="switchListTab('mine')">
+    自分のリスト <span class="list-tab-count" id="count-mine">0</span>
+  </button>
+  <button class="list-tab" data-list="received" onclick="switchListTab('received')">
+    友達のリスト <span class="list-tab-count" id="count-received">0</span>
+  </button>
+</div>
+
+<!-- Search + View toggle -->
+<div class="search-bar">
+  <div class="search-input-wrap">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <input type="text" class="search-input" id="search-input" placeholder="店名・場所・訪問日・メモで検索" oninput="onSearch()">
+    <button class="search-clear" id="search-clear" onclick="clearSearch()">&times;</button>
+  </div>
+</div>
+
+<!-- Status filter -->
+<div class="status-filter" id="status-filter">
+  <button class="status-chip active" onclick="filterVisit('all')">全部</button>
+  <button class="status-chip" onclick="filterVisit('visited')">行った</button>
+  <button class="status-chip" onclick="filterVisit('want')">行きたい</button>
+  <span class="status-divider"></span>
+  <button class="status-chip pub-chip active" onclick="filterPublic('all')">全部</button>
+  <button class="status-chip pub-chip" onclick="filterPublic('public')">公開</button>
+  <button class="status-chip pub-chip" onclick="filterPublic('private')">非公開</button>
+</div>
+
+<!-- Category + View tabs -->
+<div style="display:flex; align-items:center; padding: 0 16px; background: var(--card-bg); border-bottom: 1px solid var(--border);">
+  <div id="category-filter" class="category-filter" style="flex:1; border:none; padding: 8px 0;"></div>
+  <button class="sort-btn" id="sort-btn" onclick="toggleSort()" title="並び替え">↕ 新しい順</button>
+  <div class="view-tabs" style="border:none; padding: 8px 0 8px 8px; flex-shrink:0;">
+    <button class="view-tab active" data-view="list" onclick="switchView('list')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+    <button class="view-tab" data-view="map" onclick="switchView('map')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- Person Filter (友達のリスト用) -->
+<div class="person-filter-wrap" id="person-filter-wrap">
+  <div class="person-filter-label">おすすめしてくれた人</div>
+  <div class="person-filter" id="person-filter"></div>
+</div>
+
+<div id="list-view" class="content"></div>
+<div id="map-container"><div id="map"></div></div>
+
+<!-- Add/Edit Modal -->
+<div id="add-modal" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-title">お店を追加</span>
+      <button class="modal-close" onclick="closeAddModal()">&times;</button>
+    </div>
+    <form id="shop-form" onsubmit="saveShop(event)">
+      <input type="hidden" id="shop-id">
+      <div class="url-import" id="url-import-section">
+        <label class="form-label">URLから自動入力</label>
+        <div class="url-import-row">
+          <input type="url" id="import-url" placeholder="食べログ・Google Maps等のURL">
+          <button type="button" id="import-btn" onclick="importFromUrl()">取得</button>
+        </div>
+        <div class="url-import-hint">食べログ、Google Maps、Retty 等のURLを貼ると店名・住所を自動で入力します</div>
+        <div class="url-import-status" id="import-status"></div>
+      </div>
+      <hr class="form-divider">
+      <div class="form-group">
+        <label class="form-label">写真</label>
+        <div class="photo-upload-area" id="photo-area" onclick="document.getElementById('photo-input').click()">
+          <div id="photo-placeholder">📷 タップして写真を追加</div>
+          <input type="file" id="photo-input" accept="image/*" onchange="handlePhoto(event)">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">お店の名前 *</label>
+        <input type="text" class="form-input" id="shop-name" required placeholder="例: 焼肉太郎">
+      </div>
+      <div class="form-group">
+        <label class="form-label">カテゴリ</label>
+        <select class="form-select" id="shop-category">
+          <option value="和食">和食</option><option value="洋食">洋食</option><option value="中華">中華</option>
+          <option value="イタリアン">イタリアン</option><option value="フレンチ">フレンチ</option>
+          <option value="韓国料理">韓国料理</option><option value="ラーメン">ラーメン</option>
+          <option value="カフェ">カフェ</option><option value="居酒屋">居酒屋</option>
+          <option value="焼肉">焼肉</option><option value="寿司">寿司</option>
+          <option value="カレー">カレー</option><option value="パン">パン</option>
+          <option value="スイーツ">スイーツ</option><option value="バー">バー</option>
+          <option value="その他">その他</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">おすすめ度</label>
+        <div class="rating-input" id="rating-input">
+          <button type="button" class="rating-star" data-value="1" onclick="setRating(1)">★</button>
+          <button type="button" class="rating-star" data-value="2" onclick="setRating(2)">★</button>
+          <button type="button" class="rating-star" data-value="3" onclick="setRating(3)">★</button>
+          <button type="button" class="rating-star" data-value="4" onclick="setRating(4)">★</button>
+          <button type="button" class="rating-star" data-value="5" onclick="setRating(5)">★</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">住所・場所</label>
+        <input type="text" class="form-input" id="shop-address" placeholder="例: 東京都渋谷区...">
+      </div>
+      <div class="form-group">
+        <label class="form-label">メモ・おすすめポイント</label>
+        <textarea class="form-textarea" id="shop-memo" placeholder="おすすめメニューや雰囲気など"></textarea>
+      </div>
+      <div class="form-group">
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-label">友達に公開する</div>
+            <div class="toggle-hint">オンにすると共有時に含まれます</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="shop-public">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+      <button type="submit" class="btn-primary" id="submit-btn">追加する</button>
+      <button type="button" class="btn-danger" id="delete-btn" style="display:none" onclick="deleteShop()">このお店を削除</button>
+    </form>
+  </div>
+</div>
+
+<!-- Share Modal -->
+<div id="share-modal" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">リストを共有</span>
+      <button class="modal-close" onclick="closeShareModal()">&times;</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">あなたの名前</label>
+      <input type="text" class="form-input" id="share-name" placeholder="例: たろう" value="">
+    </div>
+    <div class="share-section">
+      <label class="form-label">共有リンク</label>
+      <div class="share-url">
+        <input type="text" id="share-url" readonly>
+        <button onclick="copyShareUrl()">コピー</button>
+      </div>
+    </div>
+    <div class="share-buttons">
+      <button class="share-btn" onclick="shareLine()"><span class="share-btn-icon">💬</span>LINE</button>
+      <button class="share-btn" onclick="shareTwitter()"><span class="share-btn-icon">🐦</span>X</button>
+      <button class="share-btn" onclick="shareNative()"><span class="share-btn-icon">📤</span>その他</button>
+    </div>
+  </div>
+</div>
+
+<!-- Friends Modal -->
+<div id="friends-modal" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">友達リスト</span>
+      <button class="modal-close" onclick="closeFriendsModal()">&times;</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">あなたの名前</label>
+      <input type="text" class="form-input" id="my-name-input" placeholder="例: たろう" oninput="saveMyName()">
+    </div>
+    <div class="form-group">
+      <label class="form-label">友達</label>
+      <div id="friends-list" class="friends-modal-list"></div>
+      <div class="friend-add-row">
+        <input type="text" class="form-input" id="friend-name-input" placeholder="友達の名前を入力" onkeydown="if(event.key==='Enter'){event.preventDefault();addFriend();}">
+        <button onclick="addFriend()">追加</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Send to Friend Modal -->
+<div id="send-friend-modal" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">友達に送る</span>
+      <button class="modal-close" onclick="closeSendFriendModal()">&times;</button>
+    </div>
+    <div id="send-friend-shop" class="send-selected"></div>
+    <div class="form-group">
+      <label class="form-label">送る相手を選ぶ</label>
+      <div id="send-friend-list" class="send-friend-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Visit Add Modal -->
+<div id="visit-modal" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">訪問を記録</span>
+      <button class="modal-close" onclick="closeVisitModal()">&times;</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">訪問日</label>
+      <input type="date" class="form-input" id="visit-date">
+    </div>
+    <div class="form-group">
+      <label class="form-label">写真</label>
+      <div class="visit-photos-preview" id="visit-photos-preview">
+        <button type="button" class="visit-photo-add-btn" onclick="document.getElementById('visit-photo-input').click()">+</button>
+      </div>
+      <input type="file" id="visit-photo-input" accept="image/*" multiple onchange="handleVisitPhotos(event)" style="display:none">
+    </div>
+    <div class="form-group">
+      <label class="form-label">メモ</label>
+      <textarea class="form-textarea" id="visit-memo" placeholder="食べたものや感想など"></textarea>
+    </div>
+    <div class="visit-form-actions">
+      <button type="button" class="visit-cancel-btn" onclick="closeVisitModal()">キャンセル</button>
+      <button type="button" class="visit-save-btn" onclick="saveVisit()">記録する</button>
+    </div>
+  </div>
+</div>
+
+<!-- Detail View -->
+<div id="detail-view" class="detail-view">
+  <div class="detail-header">
+    <button class="detail-back" onclick="closeDetail()">‹</button>
+    <span class="detail-title" id="detail-header-title"></span>
+    <button class="detail-edit" id="detail-edit-btn" onclick="editFromDetail()">編集</button>
+  </div>
+  <div class="detail-content" id="detail-content"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const STORAGE_KEY = 'my-osusume-shops';
+const RECEIVED_KEY = 'my-osusume-received';
+const NAME_KEY = 'my-osusume-name';
+const FRIENDS_KEY = 'my-osusume-friends';
+
+let friends = [];
+
+let myShops = [];
+let receivedShops = [];
+let currentRating = 0;
+let currentPhoto = '';
+let editingId = null;
+let activeCategory = 'all';
+let activeListTab = 'mine';
+let activeView = 'list';
+let searchQuery = '';
+let activePerson = 'all';
+let activeVisitFilter = 'all';
+let activePublicFilter = 'all';
+let activeSort = 'newest';
+let map = null;
+let markers = [];
+let detailMap = null;
+let isSharedView = false;
+let visitPhotos = [];
+let visitShopId = null;
+
+const CATEGORY_EMOJI = {
+  '和食':'🍱','洋食':'🍽️','中華':'🥟','イタリアン':'🍝','フレンチ':'🥐','韓国料理':'🇰🇷',
+  'ラーメン':'🍜','カフェ':'☕','居酒屋':'🍺','焼肉':'🥩','寿司':'🍣','カレー':'🍛',
+  'パン':'🍞','スイーツ':'🍰','バー':'🍸','その他':'📍'
+};
+const CATEGORY_MAP = {
+  'ラーメン':'ラーメン','つけ麺':'ラーメン','焼肉':'焼肉','寿司':'寿司','鮨':'寿司',
+  'イタリアン':'イタリアン','パスタ':'イタリアン','ピザ':'イタリアン','フレンチ':'フレンチ',
+  '中華':'中華','韓国料理':'韓国料理','カフェ':'カフェ','喫茶':'カフェ','居酒屋':'居酒屋',
+  '和食':'和食','洋食':'洋食','カレー':'カレー','パン':'パン','ベーカリー':'パン',
+  'スイーツ':'スイーツ','ケーキ':'スイーツ','バー':'バー',
+};
+
+function getActiveShops() {
+  if (isSharedView) return myShops;
+  if (activeListTab === 'all') return [...myShops, ...receivedShops];
+  return activeListTab === 'mine' ? myShops : receivedShops;
+}
+
+function init() {
+  loadShops();
+  loadFriends();
+  checkSharedUrl();
+  updateCounts();
+  renderPersonFilter();
+  renderCategories();
+  renderList();
+  const savedName = localStorage.getItem(NAME_KEY);
+  if (savedName) {
+    document.getElementById('share-name').value = savedName;
+    document.getElementById('my-name-input').value = savedName;
+  }
+}
+
+function loadShops() {
+  try { myShops = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]').map(s => ({...s, visits: s.visits||[]})); } catch { myShops = []; }
+  try { receivedShops = JSON.parse(localStorage.getItem(RECEIVED_KEY) || '[]').map(s => ({...s, visits: s.visits||[]})); } catch { receivedShops = []; }
+}
+
+function saveMyShops() { localStorage.setItem(STORAGE_KEY, JSON.stringify(myShops)); }
+function saveReceivedShops() { localStorage.setItem(RECEIVED_KEY, JSON.stringify(receivedShops)); }
+
+function updateCounts() {
+  document.getElementById('count-all').textContent = myShops.length + receivedShops.length;
+  document.getElementById('count-mine').textContent = myShops.length;
+  document.getElementById('count-received').textContent = receivedShops.length;
+}
+
+function checkSharedUrl() {
+  const params = new URLSearchParams(location.search);
+  const data = params.get('data');
+  if (!data) return;
+  try {
+    const decoded = JSON.parse(decodeURIComponent(atob(data)));
+    if (decoded.shops && Array.isArray(decoded.shops)) {
+      isSharedView = true;
+      myShops = decoded.shops.map(s => ({...s, visits: s.visits||[], from: decoded.owner||'誰か'}));
+      document.getElementById('shared-banner').style.display = 'block';
+      document.getElementById('shared-owner').textContent = decoded.owner || '誰か';
+      document.getElementById('detail-edit-btn').style.display = 'none';
+    }
+  } catch {}
+}
+
+function importSharedShops() {
+  const owner = document.getElementById('shared-owner').textContent;
+  const newShops = myShops.map(s => ({...s, id: Date.now() + Math.random(), visits: s.visits||[], from: owner}));
+  receivedShops = [...receivedShops, ...newShops];
+  saveReceivedShops();
+  showToast(`${newShops.length}件を「友達のリスト」に追加しました`);
+  history.replaceState(null, '', location.pathname);
+  isSharedView = false;
+  document.getElementById('shared-banner').style.display = 'none';
+  document.getElementById('detail-edit-btn').style.display = '';
+  loadShops();
+  activeListTab = 'received';
+  document.querySelectorAll('.list-tab').forEach(t => t.classList.toggle('active', t.dataset.list === 'received'));
+  updateCounts();
+  renderPersonFilter();
+  renderCategories();
+  renderList();
+}
+
+function switchListTab(tab) {
+  activeListTab = tab;
+  activeCategory = 'all';
+  activePerson = 'all';
+  searchQuery = '';
+  document.getElementById('search-input').value = '';
+  document.getElementById('search-clear').classList.remove('visible');
+  document.querySelectorAll('.list-tab').forEach(t => t.classList.toggle('active', t.dataset.list === tab));
+  renderPersonFilter();
+  renderCategories();
+  renderList();
+  if (map && activeView === 'map') renderMapMarkers();
+}
+
+function renderPersonFilter() {
+  const wrap = document.getElementById('person-filter-wrap');
+  if ((activeListTab !== 'received' && activeListTab !== 'all') || isSharedView) {
+    wrap.classList.remove('visible');
+    return;
+  }
+  const people = [...new Set(receivedShops.map(s => s.from).filter(Boolean))];
+  if (people.length === 0) { wrap.classList.remove('visible'); return; }
+  wrap.classList.add('visible');
+  const container = document.getElementById('person-filter');
+  container.innerHTML = `<button class="person-chip ${activePerson === 'all' ? 'active' : ''}" onclick="filterPerson('all')">全員</button>` +
+    people.map(p => `<button class="person-chip ${activePerson === p ? 'active' : ''}" onclick="filterPerson('${escAttr(p)}')">${escHtml(p)}</button>`).join('');
+}
+
+function filterPerson(person) {
+  activePerson = person;
+  renderPersonFilter();
+  renderList();
+  if (map && activeView === 'map') renderMapMarkers();
+}
+
+function renderCategories() {
+  const shops = getActiveShops();
+  const categories = ['all', ...new Set(shops.map(s => s.category).filter(Boolean))];
+  const container = document.getElementById('category-filter');
+  container.innerHTML = categories.map(c =>
+    `<button class="category-chip ${activeCategory === c ? 'active' : ''}"
+      onclick="filterCategory('${c}')">${c === 'all' ? 'すべて' : (CATEGORY_EMOJI[c]||'') + c}</button>`
+  ).join('');
+}
+
+function filterCategory(cat) {
+  activeCategory = cat;
+  renderCategories();
+  renderList();
+  if (map && activeView === 'map') renderMapMarkers();
+}
+
+function filterVisit(val) {
+  activeVisitFilter = val;
+  document.querySelectorAll('.status-chip:not(.pub-chip)').forEach(el => {
+    const v = el.getAttribute('onclick').match(/'(\w+)'/)[1];
+    el.classList.toggle('active', v === val);
+  });
+  renderList();
+  if (map && activeView === 'map') renderMapMarkers();
+}
+function filterPublic(val) {
+  activePublicFilter = val;
+  document.querySelectorAll('.status-chip.pub-chip').forEach(el => {
+    const v = el.getAttribute('onclick').match(/'(\w+)'/)[1];
+    el.classList.toggle('active', v === val);
+  });
+  renderList();
+  if (map && activeView === 'map') renderMapMarkers();
+}
+
+const SORT_OPTIONS = [
+  { key: 'newest', label: '新しい順' },
+  { key: 'oldest', label: '古い順' },
+  { key: 'rating', label: '評価順' },
+];
+function toggleSort() {
+  const idx = SORT_OPTIONS.findIndex(s => s.key === activeSort);
+  activeSort = SORT_OPTIONS[(idx + 1) % SORT_OPTIONS.length].key;
+  const btn = document.getElementById('sort-btn');
+  btn.textContent = '↕ ' + SORT_OPTIONS.find(s => s.key === activeSort).label;
+  btn.classList.toggle('active', activeSort !== 'newest');
+  renderList();
+  if (map && activeView === 'map') renderMapMarkers();
+}
+
+function getFilteredShops() {
+  let shops = getActiveShops();
+  if (activePerson !== 'all') shops = shops.filter(s => s.from === activePerson);
+  if (activeVisitFilter === 'visited') shops = shops.filter(s => (s.visits||[]).length > 0);
+  else if (activeVisitFilter === 'want') shops = shops.filter(s => (s.visits||[]).length === 0);
+  if (activePublicFilter === 'public') shops = shops.filter(s => s.isPublic);
+  else if (activePublicFilter === 'private') shops = shops.filter(s => !s.isPublic);
+  if (activeCategory !== 'all') shops = shops.filter(s => s.category === activeCategory);
+  if (searchQuery) {
+    const q = searchQuery.toLowerCase();
+    shops = shops.filter(s =>
+      (s.name||'').toLowerCase().includes(q) ||
+      (s.category||'').toLowerCase().includes(q) ||
+      (s.address||'').toLowerCase().includes(q) ||
+      (s.memo||'').toLowerCase().includes(q) ||
+      (s.from||'').toLowerCase().includes(q) ||
+      (s.visits||[]).some(v => {
+        if ((v.memo||'').toLowerCase().includes(q)) return true;
+        if (!v.date) return false;
+        const d = v.date;
+        const [y, m, day] = d.split('-');
+        const jpDate = `${+y}年${+m}月${+day}日`;
+        return d.includes(q) || jpDate.includes(q);
+      })
+    );
+  }
+  if (activeSort === 'newest') shops.sort((a, b) => (b.createdAt||'').localeCompare(a.createdAt||''));
+  else if (activeSort === 'oldest') shops.sort((a, b) => (a.createdAt||'').localeCompare(b.createdAt||''));
+  else if (activeSort === 'rating') shops.sort((a, b) => (b.rating||0) - (a.rating||0));
+  return shops;
+}
+
+function onSearch() {
+  searchQuery = document.getElementById('search-input').value.trim();
+  document.getElementById('search-clear').classList.toggle('visible', searchQuery.length > 0);
+  renderList();
+  if (map && activeView === 'map') renderMapMarkers();
+}
+
+function clearSearch() {
+  document.getElementById('search-input').value = '';
+  searchQuery = '';
+  document.getElementById('search-clear').classList.remove('visible');
+  renderList();
+}
+
+function renderList() {
+  const container = document.getElementById('list-view');
+  const filtered = getFilteredShops();
+  const isMine = activeListTab === 'mine' && !isSharedView;
+
+  if (filtered.length === 0) {
+    const allShops = getActiveShops();
+    let msg = '';
+    if (searchQuery) msg = `「${escHtml(searchQuery)}」に一致するお店がありません`;
+    else if (activeListTab === 'received' && allShops.length === 0) msg = 'まだ友達のおすすめがありません<br>共有リンクからインポートできます';
+    else if (allShops.length === 0) msg = 'まだお店が登録されていません<br>＋ボタンからお気に入りを追加しよう';
+    else msg = 'このカテゴリにはお店がありません';
+    container.innerHTML = `<div class="empty-state"><div class="empty-state-icon">${activeListTab === 'received' ? '🎁' : '🍽️'}</div><div class="empty-state-text">${msg}</div></div>`;
+    return;
+  }
+
+  const countHtml = searchQuery ? `<div class="result-count">${filtered.length}件の結果</div>` : '';
+
+  container.innerHTML = countHtml + filtered.map(shop => {
+    const visitCount = (shop.visits || []).length;
+    const emoji = CATEGORY_EMOJI[shop.category] || '📍';
+    return `
+    <div class="shop-item" onclick="openDetail('${shop.id}')">
+      <div class="shop-item-emoji">${emoji}</div>
+      <div class="shop-item-info">
+        <div class="shop-item-top">
+          <span class="shop-item-name">${escHtml(shop.name)}</span>
+          ${shop.rating ? `<span class="shop-item-rating">${'★'.repeat(shop.rating)}</span>` : ''}
+        </div>
+        <div class="shop-item-sub">${escHtml(shop.category)}${shop.address ? ' · ' + escHtml(shop.address) : ''}</div>
+        <div class="shop-item-meta">
+          ${visitCount > 0 ? `<span class="shop-item-badge visited">行った (${visitCount}回)</span>` : `<span class="shop-item-badge want">行きたい</span>`}
+          ${shop.isPublic ? `<span class="shop-item-public">🌐 公開</span>` : ''}
+          ${shop.from ? `<span class="shop-item-from">👤 ${escHtml(shop.from)}</span>` : ''}
+        </div>
+      </div>
+      <span class="shop-item-chevron">›</span>
+    </div>`;
+  }).join('');
+}
+
+function switchView(view) {
+  activeView = view;
+  document.querySelectorAll('.view-tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
+  const listView = document.getElementById('list-view');
+  const mapContainer = document.getElementById('map-container');
+  if (view === 'list') {
+    listView.style.display = '';
+    mapContainer.style.display = 'none';
+  } else {
+    listView.style.display = 'none';
+    mapContainer.style.display = 'block';
+    initMap();
+  }
+}
+
+function initMap() {
+  if (!map) {
+    map = L.map('map').setView([35.6812, 139.7671], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(map);
+  }
+  setTimeout(() => { map.invalidateSize(); renderMapMarkers(); }, 100);
+}
+
+function renderMapMarkers() {
+  markers.forEach(m => map.removeLayer(m));
+  markers = [];
+  const filtered = getFilteredShops().filter(s => s.lat && s.lng);
+  if (filtered.length === 0) return;
+  filtered.forEach(shop => {
+    const marker = L.marker([shop.lat, shop.lng]).addTo(map)
+      .bindPopup(`<b>${escHtml(shop.name)}</b><br>${escHtml(shop.category)}<br>${shop.rating ? '★'.repeat(shop.rating) : ''}`);
+    marker.on('click', () => openDetail(shop.id));
+    markers.push(marker);
+  });
+  if (filtered.length === 1) map.setView([filtered[0].lat, filtered[0].lng], 15);
+  else map.fitBounds(L.featureGroup(markers).getBounds().pad(0.1));
+}
+
+async function importFromUrl() {
+  const url = document.getElementById('import-url').value.trim();
+  if (!url) return;
+  const status = document.getElementById('import-status');
+  const btn = document.getElementById('import-btn');
+  btn.disabled = true;
+  status.className = 'url-import-status loading';
+  status.textContent = '取得中...';
+  try {
+    const res = await fetch(`/api/ogp?url=${encodeURIComponent(url)}`);
+    const data = await res.json();
+    if (data.error) { status.className = 'url-import-status error'; status.textContent = `取得に失敗しました: ${data.error}`; btn.disabled = false; return; }
+    if (data.name) document.getElementById('shop-name').value = data.name;
+    if (data.address) document.getElementById('shop-address').value = data.address;
+    if (data.description && !document.getElementById('shop-memo').value) document.getElementById('shop-memo').value = data.description.substring(0, 200);
+    if (data.category) {
+      const catLower = data.category.toLowerCase();
+      for (const [key, val] of Object.entries(CATEGORY_MAP)) { if (catLower.includes(key.toLowerCase())) { document.getElementById('shop-category').value = val; break; } }
+    }
+    if (data.image && !currentPhoto) {
+      currentPhoto = data.image;
+      document.getElementById('photo-area').classList.add('has-photo');
+      document.getElementById('photo-placeholder').innerHTML = `<img src="${data.image}" alt="photo">`;
+    }
+    let filled = []; if (data.name) filled.push('店名'); if (data.address) filled.push('住所'); if (data.category) filled.push('カテゴリ'); if (data.image) filled.push('写真');
+    status.className = 'url-import-status success';
+    status.textContent = filled.length > 0 ? `${filled.join('・')}を取得しました（${data.site_name || 'Web'}）` : '情報を取得できませんでした。手動で入力してください';
+  } catch { status.className = 'url-import-status error'; status.textContent = '通信エラーが発生しました'; }
+  btn.disabled = false;
+}
+
+function openAddModal() {
+  editingId = null; currentRating = 0; currentPhoto = '';
+  document.getElementById('modal-title').textContent = 'お店を追加';
+  document.getElementById('submit-btn').textContent = '追加する';
+  document.getElementById('delete-btn').style.display = 'none';
+  document.getElementById('url-import-section').style.display = '';
+  document.getElementById('shop-form').reset();
+  document.getElementById('import-url').value = '';
+  document.getElementById('import-status').className = 'url-import-status';
+  document.getElementById('photo-area').classList.remove('has-photo');
+  document.getElementById('photo-placeholder').innerHTML = '📷 タップして写真を追加';
+  document.getElementById('shop-public').checked = false;
+  updateRatingStars();
+  document.getElementById('add-modal').classList.add('visible');
+}
+
+function openEditModal(id) {
+  const allShops = [...myShops, ...receivedShops];
+  const shop = allShops.find(s => String(s.id) === String(id));
+  if (!shop) return;
+  editingId = id;
+  document.getElementById('modal-title').textContent = 'お店を編集';
+  document.getElementById('submit-btn').textContent = '更新する';
+  document.getElementById('delete-btn').style.display = 'block';
+  document.getElementById('url-import-section').style.display = 'none';
+  document.getElementById('shop-id').value = id;
+  document.getElementById('shop-name').value = shop.name;
+  document.getElementById('shop-category').value = shop.category;
+  document.getElementById('shop-address').value = shop.address || '';
+  document.getElementById('shop-memo').value = shop.memo || '';
+  currentRating = shop.rating || 0; currentPhoto = shop.photo || '';
+  updateRatingStars();
+  const photoArea = document.getElementById('photo-area');
+  if (currentPhoto) { photoArea.classList.add('has-photo'); document.getElementById('photo-placeholder').innerHTML = `<img src="${currentPhoto}" alt="photo">`; }
+  else { photoArea.classList.remove('has-photo'); document.getElementById('photo-placeholder').innerHTML = '📷 タップして写真を追加'; }
+  document.getElementById('shop-public').checked = !!shop.isPublic;
+  document.getElementById('add-modal').classList.add('visible');
+}
+
+function closeAddModal() { document.getElementById('add-modal').classList.remove('visible'); }
+function setRating(val) { currentRating = val; updateRatingStars(); }
+function updateRatingStars() { document.querySelectorAll('.rating-star').forEach(star => { star.classList.toggle('active', parseInt(star.dataset.value) <= currentRating); }); }
+
+function handlePhoto(e) {
+  const file = e.target.files[0]; if (!file) return;
+  resizeImage(file, (dataUrl) => { currentPhoto = dataUrl; document.getElementById('photo-area').classList.add('has-photo'); document.getElementById('photo-placeholder').innerHTML = `<img src="${dataUrl}" alt="photo">`; });
+}
+
+function resizeImage(file, callback, maxSize = 800) {
+  const reader = new FileReader();
+  reader.onload = (ev) => { const img = new Image(); img.onload = () => { const canvas = document.createElement('canvas'); let w = img.width, h = img.height; if (w > maxSize || h > maxSize) { if (w > h) { h = h*maxSize/w; w = maxSize; } else { w = w*maxSize/h; h = maxSize; } } canvas.width = w; canvas.height = h; canvas.getContext('2d').drawImage(img,0,0,w,h); callback(canvas.toDataURL('image/jpeg',0.7)); }; img.src = ev.target.result; };
+  reader.readAsDataURL(file);
+}
+
+async function geocodeAddress(address) {
+  if (!address) return null;
+  try { const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`); const data = await res.json(); if (data.length > 0) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) }; } catch {}
+  return null;
+}
+
+async function saveShop(e) {
+  e.preventDefault();
+  const name = document.getElementById('shop-name').value.trim();
+  const category = document.getElementById('shop-category').value;
+  const address = document.getElementById('shop-address').value.trim();
+  const memo = document.getElementById('shop-memo').value.trim();
+  if (!name) return;
+  let coords = await geocodeAddress(address);
+
+  const isInReceived = receivedShops.some(s => String(s.id) === String(editingId));
+  const targetList = editingId && isInReceived ? receivedShops : myShops;
+  const existingShop = editingId ? targetList.find(s => String(s.id) === String(editingId)) : null;
+
+  const isPublic = document.getElementById('shop-public').checked;
+  const shopData = {
+    id: editingId || Date.now(), name, category, address, memo,
+    rating: currentRating, photo: currentPhoto, isPublic,
+    lat: coords?.lat || null, lng: coords?.lng || null,
+    visits: existingShop?.visits || [],
+    from: existingShop?.from || '',
+    sourceUrl: existingShop?.sourceUrl || document.getElementById('import-url')?.value?.trim() || '',
+    createdAt: existingShop?.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  if (editingId) {
+    if (isInReceived) { receivedShops = receivedShops.map(s => String(s.id) === String(editingId) ? shopData : s); saveReceivedShops(); }
+    else { myShops = myShops.map(s => String(s.id) === String(editingId) ? shopData : s); saveMyShops(); }
+    showToast('お店を更新しました');
+  } else {
+    myShops.push(shopData); saveMyShops();
+    showToast('お店を追加しました');
+  }
+  closeAddModal(); updateCounts(); renderCategories(); renderList();
+  if (map) renderMapMarkers();
+  if (document.getElementById('detail-view').classList.contains('visible')) openDetail(shopData.id);
+}
+
+function deleteShop() {
+  if (!editingId) return;
+  if (!confirm('このお店を削除しますか？')) return;
+  const isInReceived = receivedShops.some(s => String(s.id) === String(editingId));
+  if (isInReceived) { receivedShops = receivedShops.filter(s => String(s.id) !== String(editingId)); saveReceivedShops(); }
+  else { myShops = myShops.filter(s => String(s.id) !== String(editingId)); saveMyShops(); }
+  closeAddModal(); closeDetail(); updateCounts(); renderCategories(); renderList();
+  if (map) renderMapMarkers();
+  showToast('お店を削除しました');
+}
+
+function findShopById(id) {
+  return myShops.find(s => String(s.id) === String(id)) || receivedShops.find(s => String(s.id) === String(id));
+}
+
+function openVisitModal(shopId) {
+  visitShopId = shopId; visitPhotos = [];
+  document.getElementById('visit-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('visit-memo').value = '';
+  renderVisitPhotoPreview();
+  document.getElementById('visit-modal').classList.add('visible');
+}
+function closeVisitModal() { document.getElementById('visit-modal').classList.remove('visible'); visitPhotos = []; visitShopId = null; }
+
+function handleVisitPhotos(e) {
+  const files = Array.from(e.target.files); let processed = 0;
+  files.forEach(file => { resizeImage(file, (dataUrl) => { visitPhotos.push(dataUrl); processed++; if (processed === files.length) renderVisitPhotoPreview(); }, 600); });
+  e.target.value = '';
+}
+function renderVisitPhotoPreview() {
+  document.getElementById('visit-photos-preview').innerHTML = visitPhotos.map((p,i) => `<img src="${p}" alt="visit photo" class="visit-photo" onclick="removeVisitPhoto(${i})">`).join('') + `<button type="button" class="visit-photo-add-btn" onclick="document.getElementById('visit-photo-input').click()">+</button>`;
+}
+function removeVisitPhoto(index) { visitPhotos.splice(index, 1); renderVisitPhotoPreview(); }
+
+function saveVisit() {
+  if (!visitShopId) return;
+  const date = document.getElementById('visit-date').value;
+  const memo = document.getElementById('visit-memo').value.trim();
+  if (!date) { showToast('日付を入力してください'); return; }
+  const shop = findShopById(visitShopId);
+  if (!shop) return;
+  if (!shop.visits) shop.visits = [];
+  shop.visits.push({ id: Date.now(), date, memo, photos: [...visitPhotos] });
+  shop.visits.sort((a, b) => b.date.localeCompare(a.date));
+  saveMyShops(); saveReceivedShops();
+  const savedShopId = visitShopId;
+  closeVisitModal(); openDetail(savedShopId);
+  showToast('訪問を記録しました'); renderList();
+}
+
+function deleteVisit(shopId, visitId) {
+  if (!confirm('この訪問記録を削除しますか？')) return;
+  const shop = findShopById(shopId);
+  if (!shop) return;
+  shop.visits = (shop.visits || []).filter(v => v.id !== visitId);
+  saveMyShops(); saveReceivedShops();
+  openDetail(shopId); renderList();
+  showToast('訪問記録を削除しました');
+}
+
+function openDetail(id) {
+  const shop = findShopById(id);
+  if (!shop) return;
+  document.getElementById('detail-header-title').textContent = shop.name;
+  const visits = shop.visits || [];
+  const content = document.getElementById('detail-content');
+  content.innerHTML = `
+    ${shop.photo ? `<img class="detail-image" src="${shop.photo}" alt="${escHtml(shop.name)}">` : `<div class="detail-image">${CATEGORY_EMOJI[shop.category]||'📍'}</div>`}
+    <div class="detail-body">
+      <div class="detail-category">${CATEGORY_EMOJI[shop.category]||''} ${escHtml(shop.category)}</div>
+      <div class="detail-name">${escHtml(shop.name)}</div>
+      ${shop.from ? `<div class="detail-from">👤 ${escHtml(shop.from)}さんのおすすめ</div>` : ''}
+      ${shop.rating ? `<div class="detail-rating">${'★'.repeat(shop.rating)}${'☆'.repeat(5-shop.rating)}</div>` : ''}
+      ${shop.address ? `<div class="detail-address">📍 ${escHtml(shop.address)}</div>` : ''}
+      ${shop.memo ? `<div class="detail-memo">${escHtml(shop.memo).replace(/\n/g,'<br>')}</div>` : ''}
+      ${shop.lat && shop.lng ? `<div class="detail-map" id="detail-map-${shop.id}"></div>` : ''}
+      <div class="detail-actions">
+        ${shop.address ? `<button class="detail-action-btn" onclick="openGoogleMaps('${escAttr(shop.address)}')"><span class="detail-action-icon">🗺️</span>Google Maps</button>` : ''}
+        <button class="detail-action-btn" onclick="openSendFriendModal('${shop.id}')"><span class="detail-action-icon">👤</span>友達に送る</button>
+        <button class="detail-action-btn" onclick="shareShop('${shop.id}')"><span class="detail-action-icon">📤</span>共有</button>
+      </div>
+      ${receivedShops.some(s => String(s.id) === String(shop.id)) && !myShops.some(s => s.name === shop.name) ? `
+      <div style="display:flex;gap:8px;margin-bottom:16px;">
+        <button class="detail-action-btn" style="flex:1;background:#e3f2fd;border-color:#90caf9;color:#1565c0;font-weight:600;" onclick="addToMyList('${shop.id}','visited')"><span class="detail-action-icon">✅</span>行った</button>
+        <button class="detail-action-btn" style="flex:1;background:#fff3e0;border-color:#ffcc80;color:#e65100;font-weight:600;" onclick="addToMyList('${shop.id}','want')"><span class="detail-action-icon">📌</span>行きたい</button>
+      </div>` : ''}
+      <div class="visits-section">
+        <div class="visits-header">
+          <span class="visits-title">📅 訪問記録（${visits.length}回）</span>
+          ${!isSharedView ? `<button class="visits-add-btn" onclick="openVisitModal('${shop.id}')">+ 記録する</button>` : ''}
+        </div>
+        ${visits.length === 0 ? `<div class="visit-empty">まだ訪問記録がありません</div>` : visits.map(v => `
+          <div class="visit-card">
+            ${!isSharedView ? `<button class="visit-delete" onclick="event.stopPropagation(); deleteVisit('${shop.id}', ${v.id})">×</button>` : ''}
+            <div class="visit-date">${formatDate(v.date)}</div>
+            ${v.memo ? `<div class="visit-memo">${escHtml(v.memo).replace(/\n/g,'<br>')}</div>` : ''}
+            ${v.photos && v.photos.length > 0 ? `<div class="visit-photos">${v.photos.map(p => `<img src="${p}" class="visit-photo" alt="visit photo">`).join('')}</div>` : ''}
+          </div>
+        `).join('')}
+      </div>
+    </div>`;
+  document.getElementById('detail-view').classList.add('visible');
+  document.getElementById('detail-view').dataset.shopId = id;
+  if (shop.lat && shop.lng) {
+    setTimeout(() => {
+      const el = document.getElementById(`detail-map-${shop.id}`); if (!el) return;
+      if (detailMap) detailMap.remove();
+      detailMap = L.map(el).setView([shop.lat, shop.lng], 15);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(detailMap);
+      L.marker([shop.lat, shop.lng]).addTo(detailMap);
+    }, 100);
+  }
+}
+
+function closeDetail() { document.getElementById('detail-view').classList.remove('visible'); if (detailMap) { detailMap.remove(); detailMap = null; } }
+function editFromDetail() { const id = document.getElementById('detail-view').dataset.shopId; closeDetail(); openEditModal(id); }
+function openGoogleMaps(address) { window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`, '_blank'); }
+
+function addToMyList(id, status) {
+  const shop = receivedShops.find(s => String(s.id) === String(id));
+  if (!shop) return;
+  const newShop = {
+    ...shop,
+    id: Date.now(),
+    from: '',
+    visits: [],
+    isPublic: false,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+  myShops.push(newShop);
+  saveMyShops();
+  updateCounts();
+  renderCategories();
+  renderList();
+  if (status === 'visited') {
+    showToast(`「${shop.name}」を自分のリストに追加しました。訪問を記録しましょう！`);
+    openDetail(newShop.id);
+    setTimeout(() => openVisitModal(String(newShop.id)), 300);
+  } else {
+    showToast(`「${shop.name}」を行きたいリストに追加しました`);
+    openDetail(newShop.id);
+  }
+}
+
+function shareShop(id) {
+  const shop = findShopById(id); if (!shop) return;
+  const text = `${shop.name}${shop.category ? ` (${shop.category})` : ''}${shop.rating ? '\n'+'★'.repeat(shop.rating) : ''}${shop.address ? '\n📍 '+shop.address : ''}${shop.memo ? '\n'+shop.memo : ''}`;
+  if (navigator.share) navigator.share({ title: shop.name, text });
+  else { navigator.clipboard.writeText(text); showToast('コピーしました'); }
+}
+
+function openShareModal() {
+  const shops = activeListTab === 'mine' ? myShops : receivedShops;
+  if (shops.length === 0) { showToast('お店を追加してから共有できます'); return; }
+  const publicShops = shops.filter(s => s.isPublic);
+  if (publicShops.length === 0) { showToast('公開設定のお店がありません。編集画面で「友達に公開する」をオンにしてください'); return; }
+  generateShareUrl(); document.getElementById('share-modal').classList.add('visible');
+}
+function closeShareModal() { document.getElementById('share-modal').classList.remove('visible'); }
+
+function generateShareUrl() {
+  const name = document.getElementById('share-name').value.trim();
+  localStorage.setItem(NAME_KEY, name);
+  const filtered = getFilteredShops().filter(s => s.isPublic);
+  if (filtered.length === 0) { document.getElementById('share-url').value = ''; return; }
+  const shopsForShare = filtered.map(({id,name,category,rating,address,memo,lat,lng,visits}) => ({id,name,category,rating,address,memo,lat,lng,visits:(visits||[]).map(v=>({date:v.date,memo:v.memo}))}));
+  const payload = { owner: name || 'ゲスト', shops: shopsForShare };
+  const encoded = btoa(encodeURIComponent(JSON.stringify(payload)));
+  document.getElementById('share-url').value = `${location.origin}${location.pathname}?data=${encoded}`;
+}
+
+function copyShareUrl() { generateShareUrl(); navigator.clipboard.writeText(document.getElementById('share-url').value); showToast('リンクをコピーしました'); }
+function shareLine() { generateShareUrl(); const url = document.getElementById('share-url').value; const name = document.getElementById('share-name').value||'ゲスト'; window.open(`https://social-plugins.line.me/lineit/share?url=${encodeURIComponent(url)}&text=${encodeURIComponent(name+'のおすすめのお店')}`, '_blank'); }
+function shareTwitter() { generateShareUrl(); const url = document.getElementById('share-url').value; const name = document.getElementById('share-name').value||'ゲスト'; window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(name+'のおすすめのお店')}&url=${encodeURIComponent(url)}`, '_blank'); }
+function shareNative() { generateShareUrl(); const url = document.getElementById('share-url').value; const name = document.getElementById('share-name').value||'ゲスト'; if (navigator.share) navigator.share({ title: 'My Osusume', text: name+'のおすすめのお店', url }); else copyShareUrl(); }
+
+function formatDate(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  const weekdays = ['日','月','火','水','木','金','土'];
+  return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日（${weekdays[d.getDay()]}）`;
+}
+function showToast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('visible'); setTimeout(() => t.classList.remove('visible'), 2000); }
+function escHtml(str) { if (!str) return ''; const d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
+function escAttr(str) { return (str||'').replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
+
+// Friends management
+function loadFriends() {
+  try { friends = JSON.parse(localStorage.getItem(FRIENDS_KEY)) || []; } catch(e) { friends = []; }
+}
+function saveFriends() { localStorage.setItem(FRIENDS_KEY, JSON.stringify(friends)); }
+function saveMyName() {
+  const name = document.getElementById('my-name-input').value.trim();
+  localStorage.setItem(NAME_KEY, name);
+  document.getElementById('share-name').value = name;
+}
+
+function openFriendsModal() {
+  const savedName = localStorage.getItem(NAME_KEY) || '';
+  document.getElementById('my-name-input').value = savedName;
+  renderFriendsList();
+  document.getElementById('friends-modal').classList.add('visible');
+}
+function closeFriendsModal() { document.getElementById('friends-modal').classList.remove('visible'); }
+
+function renderFriendsList() {
+  const container = document.getElementById('friends-list');
+  if (friends.length === 0) {
+    container.innerHTML = '<div class="friend-empty">友達を追加すると、お店をかんたんに共有できます</div>';
+    return;
+  }
+  container.innerHTML = friends.map((f, i) => `
+    <div class="friend-item">
+      <span class="friend-name">👤 ${escHtml(f.name)}</span>
+      <button class="friend-delete" onclick="deleteFriend(${i})" title="削除">&times;</button>
+    </div>
+  `).join('');
+}
+
+function addFriend() {
+  const input = document.getElementById('friend-name-input');
+  const name = input.value.trim();
+  if (!name) return;
+  if (friends.some(f => f.name === name)) { showToast('すでに登録されています'); return; }
+  friends.push({ id: Date.now(), name });
+  saveFriends();
+  input.value = '';
+  renderFriendsList();
+  showToast(`${name}を追加しました`);
+}
+function deleteFriend(index) {
+  const name = friends[index].name;
+  friends.splice(index, 1);
+  saveFriends();
+  renderFriendsList();
+  showToast(`${name}を削除しました`);
+}
+
+// Send to friend
+let sendShopId = null;
+function openSendFriendModal(shopId) {
+  sendShopId = shopId;
+  const shop = findShopById(shopId);
+  if (!shop) return;
+  document.getElementById('send-friend-shop').innerHTML = `<strong>${escHtml(shop.name)}</strong>を送る`;
+  const container = document.getElementById('send-friend-list');
+  if (friends.length === 0) {
+    container.innerHTML = '<div class="friend-empty">まず友達を追加してください<br><button style="margin-top:12px;padding:8px 16px;border-radius:8px;border:1px solid var(--border);background:#fff;cursor:pointer" onclick="closeSendFriendModal();openFriendsModal()">友達を追加</button></div>';
+  } else {
+    container.innerHTML = friends.map(f => `
+      <div class="send-friend-item" onclick="sendToFriend('${escAttr(f.name)}')">
+        <div class="send-friend-avatar">${f.name.charAt(0)}</div>
+        <span class="send-friend-name">${escHtml(f.name)}</span>
+      </div>
+    `).join('');
+  }
+  document.getElementById('send-friend-modal').classList.add('visible');
+}
+function closeSendFriendModal() { document.getElementById('send-friend-modal').classList.remove('visible'); sendShopId = null; }
+
+function sendToFriend(friendName) {
+  const shop = findShopById(sendShopId);
+  if (!shop) return;
+  const myName = localStorage.getItem(NAME_KEY) || 'ゲスト';
+  const shopsForShare = [{ id: shop.id, name: shop.name, category: shop.category, rating: shop.rating, address: shop.address, memo: shop.memo, lat: shop.lat, lng: shop.lng, visits: (shop.visits||[]).map(v => ({date: v.date, memo: v.memo})) }];
+  const payload = { owner: myName, shops: shopsForShare };
+  const encoded = btoa(encodeURIComponent(JSON.stringify(payload)));
+  const shareUrl = `${location.origin}${location.pathname}?data=${encoded}`;
+  const text = `${myName}のおすすめ: ${shop.name}`;
+  closeSendFriendModal();
+  if (navigator.share) {
+    navigator.share({ title: text, text: text, url: shareUrl });
+  } else {
+    navigator.clipboard.writeText(`${text}\n${shareUrl}`);
+    showToast(`${friendName}への共有リンクをコピーしました`);
+  }
+}
+
+document.getElementById('share-name').addEventListener('input', generateShareUrl);
+document.querySelectorAll('.modal-overlay').forEach(o => { o.addEventListener('click', e => { if (e.target === o) o.classList.remove('visible'); }); });
+document.getElementById('import-url').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); importFromUrl(); } });
+
+init();
+</script>
+</body>
+</html>
