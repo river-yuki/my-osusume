@@ -1097,14 +1097,6 @@ function parseGoogleMapsUrl(finalUrl) {
   return { name, lat, lng };
 }
 
-async function resolveShortUrl(shortUrl) {
-  // Use HEAD via proxy to resolve short URL redirects
-  try {
-    const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(shortUrl)}`, { signal: AbortSignal.timeout(8000) });
-    const json = await res.json();
-    return json.status?.url || shortUrl;
-  } catch { return shortUrl; }
-}
 
 async function importFromUrl() {
   let url = document.getElementById('import-url').value.trim();
@@ -1116,34 +1108,23 @@ async function importFromUrl() {
   status.textContent = '取得中...';
 
   // Handle Google Maps URLs specially
-  const isGmaps = url.includes('maps.app.goo.gl') || url.includes('goo.gl/maps') || url.includes('google.com/maps') || url.includes('google.co.jp/maps');
-  if (isGmaps) {
-    try {
-      // Resolve short URL to get the full URL with place name
-      let fullUrl = url;
-      if (url.includes('goo.gl')) {
-        status.textContent = 'Google Maps リンクを解析中...';
-        fullUrl = await resolveShortUrl(url);
-      }
-      const gmaps = parseGoogleMapsUrl(fullUrl);
-      if (gmaps.name) {
-        document.getElementById('shop-name').value = gmaps.name;
-        let filled = ['店名'];
-        if (gmaps.lat && gmaps.lng) filled.push('座標');
-        // Store coordinates for later use
-        if (gmaps.lat && gmaps.lng) {
-          document.getElementById('import-url').dataset.lat = gmaps.lat;
-          document.getElementById('import-url').dataset.lng = gmaps.lng;
-        }
-        status.className = 'url-import-status success';
-        status.textContent = `${filled.join('・')}を取得しました（住所は手動で入力してください）`;
-      } else {
-        status.className = 'url-import-status error';
-        status.textContent = 'Google Mapsから店名を取得できませんでした。手動で入力してください';
-      }
-    } catch {
+  const isGmapsShort = url.includes('maps.app.goo.gl') || url.includes('goo.gl/maps');
+  const isGmapsFull = url.includes('google.com/maps') || url.includes('google.co.jp/maps');
+  if (isGmapsShort || isGmapsFull) {
+    const gmaps = parseGoogleMapsUrl(url);
+    if (gmaps.name) {
+      document.getElementById('shop-name').value = gmaps.name;
+      let filled = ['店名'];
+      if (gmaps.lat && gmaps.lng) filled.push('座標');
+      status.className = 'url-import-status success';
+      status.textContent = `${filled.join('・')}を取得しました（住所は手動で入力してください）`;
+    } else if (isGmapsShort) {
+      // Short URL doesn't contain place name - guide user
       status.className = 'url-import-status error';
-      status.textContent = 'Google Mapsリンクの解析に失敗しました。手動で入力してください';
+      status.innerHTML = 'Google Mapsの短縮URLからは店名を取得できません。<br>💡 Google Mapsでお店を開き、<b>ブラウザのアドレスバー</b>からURLをコピーしてください';
+    } else {
+      status.className = 'url-import-status error';
+      status.textContent = 'Google Mapsから店名を取得できませんでした。手動で入力してください';
     }
     btn.disabled = false;
     return;
