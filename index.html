@@ -704,6 +704,7 @@
 <div class="toast" id="toast"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/lz-string@1.5.0/libs/lz-string.min.js"></script>
 <script>
 const STORAGE_KEY = 'my-osusume-shops';
 const RECEIVED_KEY = 'my-osusume-received';
@@ -782,15 +783,33 @@ function updateCounts() {
 
 function checkSharedUrl() {
   const params = new URLSearchParams(location.search);
-  const data = params.get('data');
+  const data = params.get('d') || params.get('data');
   if (!data) return;
   try {
-    const decoded = JSON.parse(decodeURIComponent(atob(data)));
-    if (decoded.shops && Array.isArray(decoded.shops)) {
+    let jsonStr;
+    if (params.get('d')) {
+      // New compressed format
+      jsonStr = LZString.decompressFromEncodedURIComponent(data);
+    } else {
+      // Legacy base64 format
+      jsonStr = decodeURIComponent(atob(data));
+    }
+    const decoded = JSON.parse(jsonStr);
+    // Support both new short keys and legacy long keys
+    const shops = decoded.s || decoded.shops;
+    const owner = decoded.o || decoded.owner || '誰か';
+    if (shops && Array.isArray(shops)) {
       isSharedView = true;
-      myShops = decoded.shops.map(s => ({...s, visits: s.visits||[], from: decoded.owner||'誰か'}));
+      myShops = shops.map(s => ({
+        id: s.id || Date.now() + Math.random(),
+        name: s.n || s.name, category: s.c || s.category, rating: s.r || s.rating,
+        address: s.a || s.address, memo: s.m || s.memo,
+        lat: s.la || s.lat, lng: s.lo || s.lng,
+        visits: (s.v || s.visits || []).map(v => ({date: v.d || v.date, memo: v.m || v.memo})),
+        from: owner
+      }));
       document.getElementById('shared-banner').style.display = 'block';
-      document.getElementById('shared-owner').textContent = decoded.owner || '誰か';
+      document.getElementById('shared-owner').textContent = owner;
       document.getElementById('detail-edit-btn').style.display = 'none';
     }
   } catch {}
@@ -1475,10 +1494,10 @@ function generateShareUrl() {
   localStorage.setItem(NAME_KEY, name);
   const filtered = getFilteredShops().filter(s => s.isPublic);
   if (filtered.length === 0) { document.getElementById('share-url').value = ''; return; }
-  const shopsForShare = filtered.map(({id,name,category,rating,address,memo,lat,lng,visits}) => ({id,name,category,rating,address,memo,lat,lng,visits:(visits||[]).map(v=>({date:v.date,memo:v.memo}))}));
-  const payload = { owner: name || 'ゲスト', shops: shopsForShare };
-  const encoded = btoa(encodeURIComponent(JSON.stringify(payload)));
-  document.getElementById('share-url').value = `${location.origin}${location.pathname}?data=${encoded}`;
+  const shopsForShare = filtered.map(({name,category,rating,address,memo,lat,lng,visits}) => ({n:name,c:category,r:rating,a:address,m:memo,la:lat,lo:lng,v:(visits||[]).map(v=>({d:v.date,m:v.memo}))}));
+  const payload = { o: name || 'ゲスト', s: shopsForShare };
+  const compressed = LZString.compressToEncodedURIComponent(JSON.stringify(payload));
+  document.getElementById('share-url').value = `${location.origin}${location.pathname}?d=${compressed}`;
 }
 
 function copyShareUrl() { generateShareUrl(); navigator.clipboard.writeText(document.getElementById('share-url').value); showToast('リンクをコピーしました'); }
@@ -1573,10 +1592,11 @@ function sendToFriend(friendName) {
   const shop = findShopById(sendShopId);
   if (!shop) return;
   const myName = localStorage.getItem(NAME_KEY) || 'ゲスト';
-  const shopsForShare = [{ id: shop.id, name: shop.name, category: shop.category, rating: shop.rating, address: shop.address, memo: shop.memo, lat: shop.lat, lng: shop.lng, visits: (shop.visits||[]).map(v => ({date: v.date, memo: v.memo})) }];
-  const payload = { owner: myName, shops: shopsForShare };
-  const encoded = btoa(encodeURIComponent(JSON.stringify(payload)));
-  const shareUrl = `${location.origin}${location.pathname}?data=${encoded}`;
+  const s = shop;
+  const shopsForShare = [{n:s.name,c:s.category,r:s.rating,a:s.address,m:s.memo,la:s.lat,lo:s.lng,v:(s.visits||[]).map(v=>({d:v.date,m:v.memo}))}];
+  const payload = { o: myName, s: shopsForShare };
+  const compressed = LZString.compressToEncodedURIComponent(JSON.stringify(payload));
+  const shareUrl = `${location.origin}${location.pathname}?d=${compressed}`;
   const text = `${myName}のおすすめ: ${shop.name}`;
   closeSendFriendModal();
   if (navigator.share) {
