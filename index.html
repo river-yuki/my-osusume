@@ -1026,6 +1026,26 @@ function renderMapMarkers() {
   else map.fitBounds(L.featureGroup(markers).getBounds().pad(0.1));
 }
 
+function parseOgpFromHtml(html, url) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const getMeta = (prop) => {
+    const el = doc.querySelector(`meta[property="${prop}"], meta[name="${prop}"]`);
+    return el ? el.getAttribute('content') || '' : '';
+  };
+  let name = getMeta('og:title') || doc.querySelector('title')?.textContent || '';
+  if (name.includes(' - ')) name = name.split(' - ')[0].trim();
+  if (name.includes('】') && name.includes('【')) name = name.split('】').pop().trim();
+  const description = getMeta('og:description') || getMeta('description');
+  const image = getMeta('og:image');
+  let address = '';
+  const addrMatch = description.match(/(東京都|北海道|(?:京都|大阪)府|.{2,3}県).{2,50}/);
+  if (addrMatch) address = addrMatch[0].split('。')[0].split('、')[0].trim();
+  let category = '';
+  const cats = ['ラーメン','焼肉','寿司','イタリアン','フレンチ','中華','カフェ','居酒屋','和食','洋食','韓国料理','カレー','パン','スイーツ','バー'];
+  for (const cat of cats) { if (description.includes(cat) || name.includes(cat)) { category = cat; break; } }
+  return { name: name.trim(), description: description.trim(), image, address, category, site_name: getMeta('og:site_name') };
+}
+
 async function importFromUrl() {
   const url = document.getElementById('import-url').value.trim();
   if (!url) return;
@@ -1035,8 +1055,16 @@ async function importFromUrl() {
   status.className = 'url-import-status loading';
   status.textContent = '取得中...';
   try {
-    const res = await fetch(`/api/ogp?url=${encodeURIComponent(url)}`);
-    const data = await res.json();
+    let data;
+    try {
+      const res = await fetch(`/api/ogp?url=${encodeURIComponent(url)}`);
+      data = await res.json();
+    } catch {
+      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+      const res2 = await fetch(proxyUrl);
+      const html = await res2.text();
+      data = parseOgpFromHtml(html, url);
+    }
     if (data.error) { status.className = 'url-import-status error'; status.textContent = `取得に失敗しました: ${data.error}`; btn.disabled = false; return; }
     if (data.name) document.getElementById('shop-name').value = data.name;
     if (data.address) document.getElementById('shop-address').value = data.address;
@@ -1052,8 +1080,8 @@ async function importFromUrl() {
     }
     let filled = []; if (data.name) filled.push('店名'); if (data.address) filled.push('住所'); if (data.category) filled.push('カテゴリ'); if (data.image) filled.push('写真');
     status.className = 'url-import-status success';
-    status.textContent = filled.length > 0 ? `${filled.join('・')}を取得しました（${data.site_name || 'Web'}）` : '情報を取得できませんでした。手動で入力してください';
-  } catch { status.className = 'url-import-status error'; status.textContent = '通信エラーが発生しました'; }
+    status.textContent = filled.length > 0 ? `${filled.join('・')}を取得しました` : '情報を取得できませんでした。手動で入力してください';
+  } catch { status.className = 'url-import-status error'; status.textContent = '通信エラーが発生しました。URLを確認してください'; }
   btn.disabled = false;
 }
 
